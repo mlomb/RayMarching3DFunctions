@@ -1,6 +1,8 @@
 var canvas = document.getElementById("renderer");
 var gl = canvas.getContext("webgl");
 
+gl.getExtension('OES_texture_float');
+
 var FRAGMENT_SOURCE = ''; // loaded with XHR
 
 var stats = null;
@@ -11,10 +13,12 @@ var last_time = 0;
 var camera = null;
 var lookfrom_uniform = null;
 var lookat_uniform = null;
+var time_uniform = null;
 
 function init() {
     stats = new Stats();
-    stats.showPanel(0);
+    stats.domElement.style.position = 'absolute';
+    stats.domElement.style.top = '0px';
     document.body.appendChild(stats.domElement);
 
     camera = new Camera(canvas);
@@ -35,7 +39,20 @@ function init() {
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
     
+    // let render_tex = create_render_texture();
+    // const fb = gl.createFramebuffer();
+    // gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    // gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, render_tex, 0);
+
     build_shader();
+}
+
+function create_render_texture() {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.clientWidth, canvas.clientHeight, 0, gl.RGBA, gl.FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    return tex;
 }
 
 function build_shader() {
@@ -70,13 +87,12 @@ function build_shader() {
     gl.useProgram(shader_program);
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
 
-    var v_pos = gl.getAttribLocation(shader_program, "v_pos");
-
-    gl.vertexAttribPointer(v_pos, 2, gl.FLOAT, false, 2 * 4, 0);
-    gl.enableVertexAttribArray(v_pos);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 2 * 4, 0);
+    gl.enableVertexAttribArray(0);
 
     lookat_uniform = gl.getUniformLocation(shader_program, "lookat");
     lookfrom_uniform = gl.getUniformLocation(shader_program, "lookfrom");
+    time_uniform = gl.getUniformLocation(shader_program, "time");
 }
 
 function frame(time) {
@@ -95,6 +111,7 @@ function frame(time) {
 
     gl.uniform3f(lookfrom_uniform, lookfrom[0], lookfrom[1], lookfrom[2]);
     gl.uniform3f(lookat_uniform, lookat[0], lookat[1], lookat[2]);
+    gl.uniform1f(time_uniform, time / 1000);
     
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);

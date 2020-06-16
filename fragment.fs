@@ -4,11 +4,7 @@ varying vec2 f_uv;
 
 uniform vec3 lookfrom;
 uniform vec3 lookat;
-
-const float C = 0.00001;
-
-// TODO
-// - Transparente
+uniform float time;
 
 struct Ray {
     vec3 origin;
@@ -20,8 +16,6 @@ vec3 ray_at(Ray ray, float t) {
 }
 
 Ray camera_get_ray(vec2 uv) {
-	// vec3 lookfrom = vec3(0.0, 5.0, 5.01);
-	// vec3 lookat = vec3(0, 3, 0);
 	vec3 vup = vec3(0, 1, 0);
 	float vfov = 45.0;
 	float aspect_ratio = 1.0;
@@ -46,72 +40,52 @@ Ray camera_get_ray(vec2 uv) {
     return ray;
 }
 
-float original(float x, float z) {
-    // return sin(x) + sin(z);
-    // return (x * x * x * z) / (x * x * x * x * x * x + z * z);
+const float EPS = 0.01;
+
+float f(float x, float z) {
+    return sin(x) + sin(z);
+    //return (x * x * x * z) / (x * x * x * x * x * x + z * z);
     // return x * x - z * z;
     // return sin(x);
     // return x;
-    // return abs(x) * z / sqrt(x * x + z * z); // avioncito de papel
+    //return abs(x) * z / sqrt(x * x + z * z); // avioncito de papel
     // return abs(x) * z;
-    return x * x * x + z * z * 3.0 + x * 5.0  + z * 4.0;
+    // return sin(x) + sin(z);
 }
 
-vec3 derivOriginal(vec3 location) {
-    float o = original(location.x, location.z);
-    return vec3(
-        (original(location.x + C, location.z) - o) / C,
-        -1,
-        (original(location.x, location.z + C) - o) / C
-    );
-}
+bool castRay(Ray ray, inout float t_hit) {
+    float t = 0.001;
+    float dt = 0.01;
 
-float func(float x, Ray r) {
-    return
-        original(r.origin.x + x * r.direction.x, r.origin.z + x * r.direction.z) +
-        (-r.origin.y) +
-        (-x * r.direction.y)
-        ;
-}
+    float last_f = 0.0;
+    float last_ray_y = 0.0;
 
-float derivFunc(float x, Ray r) {
-    return (func(x + C, r) - func(x, r)) / C;
-}
+    float inv = ray.origin.y > f(ray.origin.x, ray.origin.z) ? 1.0 : -1.0;
 
-bool newtonRaphson(out float t, const float t_max, const Ray r) {
-    #define EPSILON 0.00001
-
-    float h = func(t, r) / derivFunc(t, r);
-    for (int i = 0; i < 100; ++i) {
-        h = func(t, r) / derivFunc(t, r);
-
-        // x(i+1) = x(i) - f(x) / f'(x)
-        t = t - h;
-        if(t > 0.0 && t < t_max && abs(h) <= EPSILON) {
-            const float BOX_SIZE = 30.0;
-            vec3 hit_point = ray_at(r, t);
-            return BOX_SIZE - abs(hit_point.x) > 0.0 &&
-                   BOX_SIZE - abs(hit_point.y) > 0.0 &&
-                   BOX_SIZE - abs(hit_point.z) > 0.0;
+    for(int k = 0; k < 10000; k++) {
+        vec3 p = ray_at(ray, t);
+        float y = f(p.x, p.z);
+        if(p.y * inv < y * inv) {
+            t_hit = t - dt + dt * (last_f-last_ray_y) / ((last_f + p.y) - (y + last_ray_y));
+            return true;
         }
+        
+        dt = 0.02 * t;
+        t += dt;
+
+        last_f = y;
+        last_ray_y = p.y;
     }
+    
     return false;
 }
 
-bool hit_sinwave(out float t_hit, const Ray ray) {
-    t_hit = 1.0 / 0.0; // "infinity"
-    float t;
-    bool hit = false;
-    for (int k = 0; k < 50; ++k) {
-        t = pow(1.09, float(k)) - 1.0;
-        if(newtonRaphson(t, t_hit, ray)) {
-            if(t < t_hit) {
-                t_hit = t;
-                hit = true;
-            }
-        }
-    }
-    return hit;
+vec3 calcNormal(vec3 p) {
+    return normalize(vec3(
+        f(p.x - EPS, p.z) - f(p.x + EPS, p.z),
+        2.0 * EPS,
+        f(p.x, p.z - EPS) - f(p.x, p.z + EPS)
+    ));
 }
 
 vec3 color(Ray ray) {
@@ -119,18 +93,17 @@ vec3 color(Ray ray) {
     float t = 0.5 * (unit_direction.y + 1.0);
     vec3 out_color = (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
 
-    // hit function
-
     float t_hit;
-    if(hit_sinwave(t_hit, ray)) {
+    if(castRay(ray, t_hit)) {
         vec3 hit_point = ray_at(ray, t_hit);
-        vec3 normal = derivOriginal(hit_point);
+        vec3 normal = calcNormal(hit_point);
         return 0.5 * (normal + vec3(1.0));
     }
+
     return out_color;
 }
 
 void main() {
     Ray ray = camera_get_ray(f_uv);
-    gl_FragColor = vec4(color(ray), 1);
+    gl_FragColor = vec4(color(ray), 1.0);
 }
