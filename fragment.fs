@@ -1,5 +1,7 @@
 precision highp float;
 
+#define AA {{{AA}}}
+
 varying vec2 f_uv;
 
 uniform vec3 lookfrom;
@@ -97,6 +99,28 @@ vec3 color(Ray ray) {
 }
 
 void main() {
-    Ray ray = camera_get_ray(f_uv);
-    gl_FragColor = vec4(color(ray), 1.0);
+
+    vec3 total_color = vec3(0.0);
+    
+    #if AA > 1
+    vec2 resolution = 1.0 / vec2(1280, 720) / float(AA);
+    for( int m = 0; m < AA; m++ )
+    for( int n = 0; n < AA; n++ )
+    {
+        vec2 uv_aa = f_uv + resolution * vec2(m, n);
+    #else
+        vec2 uv_aa = f_uv;
+    #endif
+
+        Ray ray = camera_get_ray(uv_aa);
+        vec3 col = color(ray);
+        // col = pow(col, vec3(0.4545)); // gamma correct
+
+        total_color += col;
+    #if AA > 1
+    }
+    total_color /= float(AA*AA);
+    #endif
+
+    gl_FragColor = vec4(total_color, 1.0);
 }

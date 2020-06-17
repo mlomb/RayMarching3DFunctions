@@ -1,8 +1,6 @@
 var canvas = document.getElementById("renderer");
 var gl = canvas.getContext("webgl");
 
-gl.getExtension('OES_texture_float');
-
 var PRESET_FUNCTIONS = [
     'sin(x) * sin(z)',
     'x * x - z * z',
@@ -30,7 +28,12 @@ var PlotConfig = function() {
     this.function = PRESET_FUNCTIONS[0];
     this.skip_frames = true;
     this.max_iterations = 2000;
-    this.fov = 45;
+    this.fov = 90;
+    this.aa = 1;
+    this.reset_camera = function() {
+        if(camera) camera.reset();
+        frame_requested = true;
+    };
 };
 
 var plot_config = new PlotConfig();
@@ -80,7 +83,9 @@ function init() {
     gui.add(plot_config, 'function').name('f(x, z) = ').onFinishChange(updateShader);
     gui.add(plot_config, 'max_iterations').name('Max iterations').min(0).max(3000).onChange(updateShader);
     gui.add(plot_config, 'skip_frames').name('Skip frames');
-    gui.add(plot_config, 'fov').name('FOV').min(5).max(175).onChange(triggerFrame);
+    gui.add(plot_config, 'fov').name('FOV').min(5).max(175).step(1).onChange(triggerFrame);
+    gui.add(plot_config, 'reset_camera').name('Reset Camera');
+    gui.add(plot_config, 'aa').name('Anti Alias').min(1).max(4).step(1).onChange(updateShader);
     
     build_shader();
 }
@@ -97,7 +102,8 @@ function build_shader() {
     `;
     const fragment_code = FRAGMENT_SOURCE
         .replace("{{{FN}}}", plot_config.function)
-        .replace("{{{MAX_ITS}}}", parseInt(plot_config.max_iterations));
+        .replace("{{{MAX_ITS}}}", parseInt(plot_config.max_iterations))
+        .replace("{{{AA}}}", parseInt(plot_config.aa));
 
     var vert_shader = gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vert_shader, vertex_code);
@@ -155,11 +161,13 @@ function frame(time) {
     if(camera.hasChanged())
         frame_requested = true;
 
+    stats.domElement.style.display = plot_config.skip_frames ? 'none' : 'block';
+    
     if(!frame_requested && plot_config.skip_frames)
         return; // skip frame
     frame_requested = false;
 
-	stats.begin();
+    stats.begin();
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.viewport(0, 0, canvas.width, canvas.height);
 

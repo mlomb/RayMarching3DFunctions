@@ -27,7 +27,7 @@ function clamp(v, min, max) {
 }
 
 function Camera(domElement) {
-    this.position = [ 5, 5, 5 ];
+    this.position = [ 0, 0, 0 ];
     this.rotation = [ 0, 0, 0 ];
 
     // input
@@ -105,5 +105,11 @@ function Camera(domElement) {
             return true;
         }
         return false;
-    };
+    }.bind(this);
+    this.reset = function() {
+        this.position = [ 5, 5, 5 ];
+        this.rotation = [ 0, 0, 0 ];
+    }.bind(this);
+
+    this.reset();
 };
