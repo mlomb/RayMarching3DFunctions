@@ -33,12 +33,14 @@ function Camera(domElement) {
     // input
     var is_locked = false;
     var keys = { };
+    var changed = false;
 
     domElement.addEventListener("mousemove", function(e) {
         if(is_locked) {
             this.rotation[0] -= e.movementX * MOUSE_SPEED;
             this.rotation[1] -= e.movementY * MOUSE_SPEED;
             this.rotation[1] = clamp(this.rotation[1], -1.55334, 1.55334);
+            changed = true;
         }
     }.bind(this));
     
@@ -65,14 +67,22 @@ function Camera(domElement) {
         var up = cross(right, direction);
 
         if(is_locked) {
-            if (keys.KeyW)
+            if (keys.KeyW) {
                 this.position = addVector(this.position, multVecScalar(direction, delta * MOVEMENT_SPEED));
-            if (keys.KeyS)
+                changed = true;
+            }
+            if (keys.KeyS) {
                 this.position = addVector(this.position, multVecScalar(direction, -delta * MOVEMENT_SPEED));
-            if (keys.KeyA)
+                changed = true;
+            }
+            if (keys.KeyA) {
                 this.position = addVector(this.position, multVecScalar(right, -delta * MOVEMENT_SPEED));
-            if (keys.KeyD)
+                changed = true;
+            }
+            if (keys.KeyD) {
                 this.position = addVector(this.position, multVecScalar(right, delta * MOVEMENT_SPEED));
+                changed = true;
+            }
         }
 
     }.bind(this);
@@ -89,4 +99,11 @@ function Camera(domElement) {
     this.getLookAt = function() {
         return addVector(this.position, this.getDirection());
     }.bind(this);
+    this.hasChanged = function() {
+        if(changed) {
+            changed = false;
+            return true;
+        }
+        return false;
+    };
 };

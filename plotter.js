@@ -3,17 +3,37 @@ var gl = canvas.getContext("webgl");
 
 gl.getExtension('OES_texture_float');
 
+var PRESET_FUNCTIONS = [
+    'sin(x) * sin(z)',
+    'x * x - z * z',
+    'abs(x) * z',
+    'abs(x) * z / sqrt(x * x + z * z)', // avioncito de papel
+    '(x * x * x * z) / (x * x * x * x * x * x + z * z)'
+];
+
 var FRAGMENT_SOURCE = ''; // loaded with XHR
 
 var stats = null;
 var quadVBO = null;
 var shader_program = null;
 var last_time = 0;
+var frame_requested = false;
 
 var camera = null;
 var lookfrom_uniform = null;
 var lookat_uniform = null;
 var time_uniform = null;
+var aspect_ratio_uniform = null;
+
+var PlotConfig = function() {
+    this.preset = '';
+    this.function = PRESET_FUNCTIONS[0];
+    this.skip_frames = true;
+    this.max_iterations = 2000;
+    this.fov = 45;
+};
+
+var plot_config = new PlotConfig();
 
 function init() {
     stats = new Stats();
@@ -39,20 +59,30 @@ function init() {
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
     
-    // let render_tex = create_render_texture();
-    // const fb = gl.createFramebuffer();
-    // gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-    // gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, render_tex, 0);
+    resize();
+    window.addEventListener('resize', resize, false);
+    setInterval(resize, 1000); // avoid bugs
+    
+    function triggerFrame() {
+        frame_requested = true;
+    }
+    function updateShader() {
+        plot_config.preset = '';
+        for (var i in gui.__controllers) {
+            gui.__controllers[i].updateDisplay();
+        }
+        build_shader();
+        triggerFrame();
+    }
 
+    var gui = new dat.GUI();
+    gui.add(plot_config, 'preset', PRESET_FUNCTIONS).name("Load function").onFinishChange(function(fn) { plot_config.function = fn; updateShader(); });
+    gui.add(plot_config, 'function').name('f(x, z) = ').onFinishChange(updateShader);
+    gui.add(plot_config, 'max_iterations').name('Max iterations').min(0).max(3000).onChange(updateShader);
+    gui.add(plot_config, 'skip_frames').name('Skip frames');
+    gui.add(plot_config, 'fov').name('FOV').min(5).max(175).onChange(triggerFrame);
+    
     build_shader();
-}
-
-function create_render_texture() {
-    const tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.clientWidth, canvas.clientHeight, 0, gl.RGBA, gl.FLOAT, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    return tex;
 }
 
 function build_shader() {
@@ -65,7 +95,9 @@ function build_shader() {
             gl_Position = vec4(v_pos, 0.0, 1.0);
         }
     `;
-    const fragment_code = FRAGMENT_SOURCE;
+    const fragment_code = FRAGMENT_SOURCE
+        .replace("{{{FN}}}", plot_config.function)
+        .replace("{{{MAX_ITS}}}", parseInt(plot_config.max_iterations));
 
     var vert_shader = gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vert_shader, vertex_code);
@@ -76,8 +108,15 @@ function build_shader() {
     gl.compileShader(frag_shader);
 
     if(!gl.getShaderParameter(frag_shader, gl.COMPILE_STATUS)) {
-        throw new Error(gl.getShaderInfoLog(frag_shader));
+        var msg = gl.getShaderInfoLog(frag_shader);
+        alert(msg);
+        throw new Error(msg.trim());
     }
+
+    /*if(shader_program) {
+        gl.deleteShader(shader_program);
+        shader_program = null;
+    }*/
 
     shader_program = gl.createProgram();
     gl.attachShader(shader_program, vert_shader);
@@ -93,6 +132,17 @@ function build_shader() {
     lookat_uniform = gl.getUniformLocation(shader_program, "lookat");
     lookfrom_uniform = gl.getUniformLocation(shader_program, "lookfrom");
     time_uniform = gl.getUniformLocation(shader_program, "time");
+    aspect_ratio_uniform = gl.getUniformLocation(shader_program, "aspect_ratio");
+    fov_uniform = gl.getUniformLocation(shader_program, "fov");
+}
+
+function resize() {
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+
+    canvas.width = w;
+    canvas.height = h;
+    frame_requested = true;
 }
 
 function frame(time) {
@@ -100,18 +150,27 @@ function frame(time) {
 
     var delta = (time - last_time) / 1000;
     last_time = time;
+    
+    camera.update(delta);
+    if(camera.hasChanged())
+        frame_requested = true;
+
+    if(!frame_requested && plot_config.skip_frames)
+        return; // skip frame
+    frame_requested = false;
 
 	stats.begin();
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.viewport(0, 0, canvas.width, canvas.height);
 
-    camera.update(delta);
     var lookfrom = camera.getLookFrom();
     var lookat = camera.getLookAt();
 
     gl.uniform3f(lookfrom_uniform, lookfrom[0], lookfrom[1], lookfrom[2]);
     gl.uniform3f(lookat_uniform, lookat[0], lookat[1], lookat[2]);
     gl.uniform1f(time_uniform, time / 1000);
+    gl.uniform1f(aspect_ratio_uniform, canvas.width / canvas.height);
+    gl.uniform1f(fov_uniform, plot_config.fov);
     
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -123,5 +182,6 @@ fetch('fragment.fs')
 .then(function(data) {
     FRAGMENT_SOURCE = data;
     init();
+    frame_requested = true;
     frame(0);
 });
