@@ -6,7 +6,8 @@ var PRESET_FUNCTIONS = [
     'x * x - z * z',
     'abs(x) * z',
     'abs(x) * z / sqrt(x * x + z * z)', // avioncito de papel
-    '(x * x * x * z) / (x * x * x * x * x * x + z * z)'
+    '(x * x * x * z) / (x * x * x * x * x * x + z * z)',
+    '(sin(x) * sin(z)) * sqrt(x*x)' // valle de dora
 ];
 
 var FRAGMENT_SOURCE = ''; // loaded with XHR
